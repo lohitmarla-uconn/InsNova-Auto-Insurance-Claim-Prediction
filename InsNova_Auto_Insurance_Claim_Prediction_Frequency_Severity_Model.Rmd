@@ -1,0 +1,310 @@
+---
+title: "InsNova_Auto_Insurance_Claim_Prediction_Frequency_Severity_Model"
+author: "Lohit Marla"
+date: "2023-11-15"
+output: html_document
+---
+
+```{r}
+
+InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+train.data <- InsNova.data
+
+InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+test.data <- InsNova.val_data
+
+```
+
+```{r}
+
+### Functions of gini index 
+
+SumModelGini <- function(actuals, predictions) {
+  df = data.frame(actuals = actuals, predictions = predictions)
+  df <- df[order(df$predictions, decreasing = TRUE),]
+  df$random = (1:nrow(df))/nrow(df)
+  totalPos <- sum(df$actuals)
+  df$cumPosFound <- cumsum(df$actuals) # this will store the cumulative number of positive examples found (used for computing "Model Lorentz")
+  df$Lorentz <- df$cumPosFound / totalPos # this will store the cumulative proportion of positive examples found ("Model Lorentz")
+  df$Gini <- df$Lorentz - df$random # will store Lorentz minus random
+  return(sum(df$Gini))
+}
+
+NormalizedGini <- function(actuals, predictions) {
+  SumModelGini(actuals, predictions) / SumModelGini(actuals, actuals)
+}
+
+#cross validation
+#since we are using a two-part mode of frequency and severity, in this cv function we specify both models and
+#K-fold data divisions are done on both models
+#K = # of folds, 
+cv <- function(fit, fit2 = NULL, data, data2 = NULL, K){
+  cost = function(y, yhat) mean((y - yhat)^2)
+  n = nrow(data)
+  # data divided into K sections of equal size
+  if(K > 1) s = sample(rep(1:K, ceiling(nrow(data)/K)),nrow(data)) else 
+  if(K == 1) s = rep(1, nrow(data))
+  glm.y <- fit$y
+  cost.0 <- cost(glm.y, fitted(fit))
+  ms <- max(s)
+  #save model calls
+  call <- Call <- fit$call
+  if(!is.null(fit2)) call2 <- Call2 <- fit2$call
+  #initialize output
+  CV <- CV.coef <- NULL
+  #progress bar
+  pb <- txtProgressBar(title = "progress bar", min = 0, max = K, style = 3)
+  Sys.time() -> start
+  
+  #loop over number of divisions
+  for (i in seq_len(ms)) {
+    #testing data index
+    j.out <- seq_len(n)[(s == i)]
+    #training data index
+    if(K > 1) j.in <- seq_len(n)[(s != i)] else if (K==1) j.in = j.out
+    #fit first model based on training data
+    Call$data <- data[j.in, , drop = FALSE]; 
+    d.glm <- eval.parent(Call)
+    #prediction on testing data
+    pred.glm <- predict(d.glm, newdata=data[j.out,], type="response")
+    if(!is.null(fit2) & !is.null(data2)){
+      j2.out.data <- merge(data2, data[j.out,])
+        if(K > 1) j2.in.data <- merge(data2, data[j.in,]) else if (K==1) j2.in.data = j2.out.data
+          #fit second model based on training data
+        Call2$data <- j2.in.data
+        d.glm2 <- eval.parent(Call2)
+        #make prediction on testing data
+          pred.glm2 <- predict(d.glm2, newdata=data[j.out,], type="response")
+      }
+    #produce prediction of two-part model by taking product of predictions from both models
+    if(!is.null(fit2)) CV$Fitted = rbind(CV$Fitted, cbind(j.out, pred.glm*pred.glm2)) else 
+        CV$Fitted = rbind(CV$Fitted, cbind(j.out, pred.glm))
+    CV.coef$coef <- rbind(CV.coef$coef, coef(d.glm))
+    CV.coef$se <- rbind(CV.coef$se, coef(summary(d.glm))[,2])
+    Sys.sleep(0.1); setTxtProgressBar(pb, i, title=paste( round(i/K*100, 0),"% done"))
+  }#repeat for all K divisions, producing prediction for each observation in data
+  close(pb); Sys.time() -> end
+  cat("Cross-Validation Time Elapsed: ", round(difftime(end, start, units="secs"),3) ,"seconds \n")
+  #re-order predictions to same order as data
+  Fitted <- CV$Fitted[order(CV$Fitted[,1]),2]
+  #return prediction
+  Fitted
+}
+
+# bootstrap
+library(boot)
+bs <- function(formula, data, family, indices) {
+  d <- data[indices,] # allows boot to select sample 
+  fit <- glm(formula, family, data=d)
+  return(coef(fit)) 
+} 
+
+```
+
+```{r}
+numeric_train_data <- train_data[sapply(train_data, is.numeric)]
+
+# Calculate the correlation matrix
+cor_matrix <- cor(numeric_train_data)
+
+# Install and load the corrplot package if not already installed
+# install.packages("corrplot")
+library(corrplot)
+
+# Create a correlation plot
+corrplot(cor_matrix)
+
+```
+
+
+```{r}
+#1.1
+
+InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+train_data <- InsNova.data
+
+InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+test_data <- InsNova.val_data
+
+y <- train_data$numclaims
+
+set.seed(42)  # for reproducibility
+split_index <- createDataPartition(y, p = 0.8, list = FALSE)
+train_data_splitted <- train_data[split_index, ]
+test_data_splitted <- train_data[-split_index, ]
+
+pm.sub <- glm(numclaims ~ factor(agecat)+veh_value+
+     veh_value:veh_age+area:veh_value + exposure  + trm_len + (driving_history_score * veh_color) + (area * marital_status) + (veh_value * veh_age) +  (driving_history_score * marital_status), family = poisson , data = train_data , control = glm.control(maxit = 1000))
+
+predictions <- predict(pm.sub, newdata = train_data, type = "response")
+train_data$numclaims_predicted <- predictions 
+train_data$clm_numclaims <- (train_data$claimcst0) / train_data$numclaims
+
+ivg.sub <- glm((clm_numclaims + 0.01) ~ gender + veh_age + agecat + exposure + trm_len + (area * marital_status) + (driving_history_score * marital_status), 
+               family = inverse.gaussian(link = "log"),
+               data = subset(train_data, numclaims_predicted > 0),
+               control = glm.control(maxit = 1000))
+summary(ivg.sub)
+
+Severity.pred <- predict(ivg.sub, newdata = train_data, type = "response")
+final_prediction <- (predictions * Severity.pred )
+NormalizedGini(train_data$claimcst0, final_prediction)
+
+predictions_test_data <- predict(pm.sub, newdata = test_data, type = "response")
+Severity.pred.test <- predict(ivg.sub, newdata = test_data, type = "response")
+final_prediction_test <- predictions_test_data * Severity.pred.test
+
+```
+
+```{r}
+#1.2
+
+InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+train_data <- InsNova.data
+
+InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+test_data <- InsNova.val_data
+
+y <- train_data$numclaims
+
+set.seed(42)  # for reproducibility
+split_index <- createDataPartition(y, p = 0.8, list = FALSE)
+train_data_splitted <- train_data[split_index, ]
+test_data_splitted <- train_data[-split_index, ]
+
+pm.sub <- glm(numclaims ~ factor(agecat)+veh_value+
+     veh_value:veh_age+area:veh_value + exposure  + trm_len + (driving_history_score * veh_color) + (area * marital_status) + (veh_value * veh_age) +  (driving_history_score * marital_status), family = poisson , data = train_data_splitted , control = glm.control(maxit = 1000))
+
+predictions_train <- predict(pm.sub, newdata = train_data_splitted, type = "response")
+predictions_test <- predict(pm.sub, newdata = test_data_splitted, type = "response")
+train_data_splitted$numclaims_predicted <- predictions_train 
+train_data_splitted$clm_numclaims <- (train_data_splitted$claimcst0) / train_data_splitted$numclaims
+
+ivg.sub <- glm((clm_numclaims + 0.0001) ~ gender + veh_age + agecat + exposure + trm_len + (area * marital_status) + (driving_history_score * marital_status), 
+               family = inverse.gaussian(link = "log"),
+               data = subset(train_data_splitted, numclaims_predicted > 0),
+               control = glm.control(maxit = 1000))
+summary(ivg.sub)
+
+Severity.pred.train <- predict(ivg.sub, newdata = train_data_splitted, type = "response")
+Severity.pred <- predict(ivg.sub, newdata = train_data_splitted, type = "response")
+final_prediction <- (predictions_train * Severity.pred.train )
+NormalizedGini(train_data_splitted$claimcst0, final_prediction)
+
+predictions_test_data <- predict(pm.sub, newdata = test_data_splitted, type = "response")
+Severity.pred.test <- predict(ivg.sub, newdata = test_data_splitted, type = "response")
+final_prediction_test <- predictions_test_data * Severity.pred.test
+NormalizedGini(test_data_splitted$claimcst0, final_prediction_test)
+
+cv.ivg <- lapply(1:10, function(x) cv(fit=pm.sub, fit2=ivg.sub, data = train_data_splitted, data2=subset(train_data_splitted, clm>0), K=10))
+#mean of gini coefficients from 10 x 10-fold CV (around .21)
+mean(sapply(1:10, function(x) NormalizedGini(train_data_splitted$claimcst0, cv.ivg[[x]])))
+#standard deviation of gini coefficient from 10 X 10-fold CV (around .002)
+sd(sapply(1:10, function(x) NormalizedGini(train_data_splitted$claimcst0, cv.ivg[[x]])))
+
+```
+
+```{r}
+
+car::qqPlot(residuals(pm.sub), main = NA, pch = 19, col = 2, cex = 0.7)
+
+car::qqPlot(residuals(ivg.sub), main = NA, pch = 19, col = 2, cex = 0.7)
+
+```
+```{r}
+#2.1
+
+InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+train_data <- InsNova.data
+
+InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+test_data <- InsNova.val_data
+
+y <- train_data$numclaims
+
+set.seed(42)  # for reproducibility
+split_index <- createDataPartition(y, p = 0.8, list = FALSE)
+train_data_splitted <- train_data[split_index, ]
+test_data_splitted <- train_data[-split_index, ]
+
+pm.sub <- glm(numclaims ~ exposure + veh_body + agecat + trm_len + high_education_ind, family = poisson , data = train_data , control = glm.control(maxit = 1000))
+
+predictions <- predict(pm.sub, newdata = train_data, type = "response")
+train_data$numclaims_predicted <- predictions 
+train_data$clm_numclaims <- (train_data$claimcst0) / train_data$numclaims
+
+ivg.sub <- glm((clm_numclaims + 0.01) ~ exposure + gender + area + driving_history_score + 
+    time_of_week_driven + trm_len + numclaims_predicted,
+               family = inverse.gaussian(link = "log"),
+               data = subset(train_data, numclaims_predicted > 0),
+               control = glm.control(maxit = 1000))
+summary(ivg.sub)
+
+Severity.pred <- predict(ivg.sub, newdata = train_data, type = "response")
+final_prediction <- (predictions * Severity.pred )
+NormalizedGini(train_data$claimcst0, final_prediction)
+
+predictions_test_data <- predict(pm.sub, newdata = test_data, type = "response")
+test_data$numclaims_predicted <- predictions_test_data
+Severity.pred.test <- predict(ivg.sub, newdata = test_data, type = "response")
+final_prediction_test <- predictions_test_data * Severity.pred.test
+NormalizedGini(train_data$claimcst0, final_prediction)
+```
+
+
+```{r}
+#2.2
+
+InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+train_data <- InsNova.data
+
+InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+test_data <- InsNova.val_data
+
+y <- train_data$numclaims
+
+set.seed(42)  # for reproducibility
+split_index <- createDataPartition(y, p = 0.8, list = FALSE)
+train_data_splitted <- train_data[split_index, ]
+test_data_splitted <- train_data[-split_index, ]
+
+pm.sub <- glm(numclaims ~ exposure + veh_body + agecat + trm_len + high_education_ind, family = poisson , data = train_data_splitted , control = glm.control(maxit = 1000))
+
+predictions_train <- predict(pm.sub, newdata = train_data_splitted, type = "response")
+predictions_test <- predict(pm.sub, newdata = test_data_splitted, type = "response")
+train_data_splitted$numclaims_predicted <- predictions_train 
+train_data_splitted$clm_numclaims <- (train_data_splitted$claimcst0) / train_data_splitted$numclaims
+
+ivg.sub <- glm((clm_numclaims + 0.01) ~ exposure + gender + area + driving_history_score + 
+    time_of_week_driven + trm_len + numclaims_predicted, 
+               family = inverse.gaussian(link = "log"),
+               data = subset(train_data_splitted, numclaims_predicted > 0),
+               control = glm.control(maxit = 1000))
+summary(ivg.sub)
+
+Severity.pred.train <- predict(ivg.sub, newdata = train_data_splitted, type = "response")
+Severity.pred <- predict(ivg.sub, newdata = train_data_splitted, type = "response")
+final_prediction <- (predictions_train * Severity.pred.train )
+NormalizedGini(train_data_splitted$claimcst0, final_prediction)
+
+predictions_test_data <- predict(pm.sub, newdata = test_data_splitted, type = "response")
+test_data_splitted$numclaims_predicted <- predictions_test_data
+Severity.pred.test <- predict(ivg.sub, newdata = test_data_splitted, type = "response")
+final_prediction_test <- predictions_test_data * Severity.pred.test
+NormalizedGini(test_data_splitted$claimcst0, final_prediction_test)
+
+cv.ivg <- lapply(1:10, function(x) cv(fit=pm.sub, fit2=ivg.sub, data = train_data_splitted, data2=subset(train_data_splitted, clm>0), K=10))
+#mean of gini coefficients from 10 x 10-fold CV (around .21)
+mean(sapply(1:10, function(x) NormalizedGini(train_data_splitted$claimcst0, cv.ivg[[x]])))
+#standard deviation of gini coefficient from 10 X 10-fold CV (around .002)
+sd(sapply(1:10, function(x) NormalizedGini(train_data_splitted$claimcst0, cv.ivg[[x]])))
+
+```
+
+```{r}
+
+car::qqPlot(residuals(pm.sub), main = NA, pch = 19, col = 2, cex = 0.7)
+
+car::qqPlot(residuals(ivg.sub), main = NA, pch = 19, col = 2, cex = 0.7)
+
+```

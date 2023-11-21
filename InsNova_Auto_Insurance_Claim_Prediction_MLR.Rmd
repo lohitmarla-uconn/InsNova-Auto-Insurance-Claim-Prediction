@@ -1,0 +1,76 @@
+---
+title: "InsNova_Auto_Insurance_Claim_Prediction_Frequency_Severity_Model"
+author: "Lohit Marla"
+date: "2023-11-15"
+output: html_document
+---
+
+```{r}
+
+InsNova.data <- read.csv("data/InsNova_data_2023_train.csv")
+train.data <- InsNova.data
+InsNova.val_data <- read.csv("data/InsNova_data_2023_vh.csv")
+test.data <- InsNova.val_data
+
+nrow(train.data)
+nrow(InsNova.data)
+nrow(test.data)
+nrow(InsNova.val_data)
+
+```
+
+```{r}
+
+column_names <- c(
+     "gender", "agecat", "engine_type",
+    "veh_color", "marital_status", "e_bill", "time_of_week_driven", "high_education_ind", "veh_body"
+)
+
+# Convert the selected columns to factors in your data frame
+train.data[, column_names] <- lapply(train.data[, column_names], as.factor)
+test.data[, column_names] <- lapply(test.data[, column_names], as.factor)
+# Check the data frame structure
+
+train.data$clm <- NULL
+train.data$id <- NULL
+test.data$id <- NULL
+train.data$numclaims <- NULL
+
+str(train.data)
+str(test.data)
+
+```
+```{r}
+library(e1071)
+
+hist( (train.data$claimcst0), breaks=30, main="", xlab="fcover", col= "darkgrey")
+```
+```{r}
+hist( log(train.data$claimcst0), breaks=30, main="", xlab="fcover", col= "darkslateblue")
+```
+```{r}
+hist( sqrt(train.data$claimcst0), breaks=30, main="", xlab="fcover", col= "slategrey")
+```
+```{r}
+hist( poly(train.data$claimcst0, 2), breaks=30, main="", xlab="fcover", col= "darkgreen")
+```
+
+```{r}
+mlr.full.mod <- lm(claimcst0 ~ . , data = train.data)
+```
+
+```{r}
+car::qqPlot(residuals(mlr.full.mod), main = NA, pch = 19, col = 2, cex = 0.7)
+
+```
+```{r}
+
+plot(train.data$claimcst0, predict(mod.1,newdata = train.data), 
+     col=4, cex=0.3, xlab="Actual", ylab="Predicted", axes=FALSE)
+extpts <- which(abs(residuals(mod.1)) > 3*sd(residuals(mod.1)))
+text(train.data$claimcst0[extpts], 
+     predict(mod.1,newdata = train.data)[extpts],
+     rownames(train.data)[extpts], cex=0.5, col=2)
+axis(1); axis(2); grid(); abline(0,1, col=4, lwd=3)
+
+```

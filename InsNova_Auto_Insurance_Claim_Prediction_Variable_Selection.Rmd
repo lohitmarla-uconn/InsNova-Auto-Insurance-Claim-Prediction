@@ -1,0 +1,164 @@
+---
+title: "InsNova_Auto_Insurance_Claim_Prediction_Variable_Selection"
+author: "Lohit Marla"
+date: "2023-11-20"
+output: html_document
+---
+
+```{r}
+
+InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+train.data <- InsNova.data
+InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+test.data <- InsNova.val_data
+
+nrow(train.data)
+nrow(InsNova.data)
+nrow(test.data)
+nrow(InsNova.val_data)
+
+```
+
+```{r}
+
+column_names <- c(
+     "gender", "agecat", "engine_type",
+    "veh_color", "marital_status", "e_bill", "time_of_week_driven", "high_education_ind", "veh_body"
+)
+
+# Convert the selected columns to factors in your data frame
+train.data[, column_names] <- lapply(train.data[, column_names], as.factor)
+test.data[, column_names] <- lapply(test.data[, column_names], as.factor)
+# Check the data frame structure
+
+train.data$clm <- NULL
+train.data$id <- NULL
+test.data$id <- NULL
+
+str(train.data)
+str(test.data)
+
+```
+
+variable selection for the claimcst0
+```{r}
+mlr.full.mod <- lm(claimcst0 ~ . , data = train.data)
+```
+
+```{r}
+
+step_model <- step(mlr.full.mod)
+formula(step_model)
+AIC(step_model)
+BIC(step_model)
+```
+
+```{r}
+
+final_model.forward <- step(mlr.full.mod, direction = "forward")
+formula(final_model.forward)
+AIC(final_model.forward)
+BIC(final_model.forward)
+```
+```{r}
+
+final_model.backward <- step(mlr.full.mod, direction = "backward")
+formula(final_model.backward)
+AIC(final_model.backward)
+BIC(final_model.backward)
+```
+
+```{r}
+
+final_model.both <- step(mlr.full.mod, direction = "both")
+formula(final_model.both)
+AIC(final_model.both)
+BIC(final_model.both)
+```
+
+```{r}
+#We have choosen the model with the less BIC and AIC values and the variables selected are as follows
+
+exposure + gender + area + driving_history_score + 
+    time_of_week_driven + trm_len + numclaims
+
+```
+
+variable selection for the numclaims
+
+```{r}
+
+InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+train.data <- InsNova.data
+InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+test.data <- InsNova.val_data
+
+nrow(train.data)
+nrow(InsNova.data)
+nrow(test.data)
+nrow(InsNova.val_data)
+
+```
+
+```{r}
+
+column_names <- c(
+     "gender", "agecat", "engine_type",
+    "veh_color", "marital_status", "e_bill", "time_of_week_driven", "high_education_ind", "veh_body"
+)
+
+# Convert the selected columns to factors in your data frame
+train.data[, column_names] <- lapply(train.data[, column_names], as.factor)
+test.data[, column_names] <- lapply(test.data[, column_names], as.factor)
+# Check the data frame structure
+
+train.data$clm <- NULL
+train.data$claimcst0 <- NULL
+train.data$id <- NULL
+test.data$id <- NULL
+
+str(train.data)
+str(test.data)
+
+```
+
+```{r}
+mlr.full.mod.numclaims <- lm(numclaims ~ . , data = train.data)
+```
+
+```{r}
+
+step_model <- step(mlr.full.mod.numclaims)
+formula(step_model)
+AIC(step_model)
+BIC(step_model)
+```
+```{r}
+
+final_model.forward.numclaims <- step(mlr.full.mod.numclaims, direction = "forward")
+formula(final_model.forward.numclaims)
+AIC(final_model.forward.numclaims)
+BIC(final_model.forward.numclaims)
+```
+
+```{r}
+
+final_model.backward.numclaims <- step(mlr.full.mod.numclaims, direction = "backward")
+formula(final_model.backward.numclaims)
+AIC(final_model.backward.numclaims)
+BIC(final_model.backward.numclaims)
+```
+
+```{r}
+
+final_model.backward.numclaims <- step(mlr.full.mod.numclaims, direction = "both")
+formula(final_model.backward.numclaims)
+AIC(final_model.backward.numclaims)
+BIC(final_model.backward.numclaims)
+```
+
+```{r}
+
+numclaims ~ exposure + veh_body + agecat + trm_len + high_education_ind
+
+```
