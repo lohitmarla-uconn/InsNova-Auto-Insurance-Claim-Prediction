@@ -2,23 +2,30 @@
 title: "InsNova_Auto_Insurance_Claim_Prediction_Frequency_Severity_Model"
 author: "Lohit Marla"
 date: "2023-11-15"
-output: html_document
+output:
+  pdf_document: default
 ---
 
 ```{r}
 
-InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+suppressWarnings({
+library(caret)
+
+InsNova.data <- read.csv("data/InsNova_data_2023_train.csv")
 train.data <- InsNova.data
 
-InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+InsNova.val_data <- read.csv("data/InsNova_data_2023_vh.csv")
 test.data <- InsNova.val_data
+})
+
+options(warn = -1) 
 
 ```
 
 ```{r}
 
 ### Functions of gini index 
-
+  
 SumModelGini <- function(actuals, predictions) {
   df = data.frame(actuals = actuals, predictions = predictions)
   df <- df[order(df$predictions, decreasing = TRUE),]
@@ -91,6 +98,7 @@ cv <- function(fit, fit2 = NULL, data, data2 = NULL, K){
   Fitted
 }
 
+
 # bootstrap
 library(boot)
 bs <- function(formula, data, family, indices) {
@@ -99,20 +107,7 @@ bs <- function(formula, data, family, indices) {
   return(coef(fit)) 
 } 
 
-```
-
-```{r}
-numeric_train_data <- train_data[sapply(train_data, is.numeric)]
-
-# Calculate the correlation matrix
-cor_matrix <- cor(numeric_train_data)
-
-# Install and load the corrplot package if not already installed
-# install.packages("corrplot")
-library(corrplot)
-
-# Create a correlation plot
-corrplot(cor_matrix)
+options(warn = -1) 
 
 ```
 
@@ -120,10 +115,10 @@ corrplot(cor_matrix)
 ```{r}
 #1.1
 
-InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+InsNova.data <- read.csv("data/InsNova_data_2023_train.csv")
 train_data <- InsNova.data
 
-InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+InsNova.val_data <- read.csv("data/InsNova_data_2023_vh.csv")
 test_data <- InsNova.val_data
 
 y <- train_data$numclaims
@@ -135,6 +130,8 @@ test_data_splitted <- train_data[-split_index, ]
 
 pm.sub <- glm(numclaims ~ factor(agecat)+veh_value+
      veh_value:veh_age+area:veh_value + exposure  + trm_len + (driving_history_score * veh_color) + (area * marital_status) + (veh_value * veh_age) +  (driving_history_score * marital_status), family = poisson , data = train_data , control = glm.control(maxit = 1000))
+
+summary(pm.sub)
 
 predictions <- predict(pm.sub, newdata = train_data, type = "response")
 train_data$numclaims_predicted <- predictions 
@@ -155,14 +152,89 @@ Severity.pred.test <- predict(ivg.sub, newdata = test_data, type = "response")
 final_prediction_test <- predictions_test_data * Severity.pred.test
 
 ```
+# Poisson Regression Interpretation
+
+- **Exposure Impact:** An increase in exposure is strongly associated with a significant increase in the expected number of claims. For a one-unit increase in exposure, the expected number of claims is estimated to increase by approximately 1124.28%.
+
+- **Age Categories:** Certain age categories show significant effects on the expected number of claims. For instance, compared to the reference category (agecat = 1), the expected number of claims decreases by approximately 19.44% for agecat = 5.
+
+- **Vehicle Value (veh\_value):** Vehicle value has a significant impact on the expected number of claims. For a one-unit increase in vehicle value, the expected number of claims is estimated to decrease by approximately 22.40%.
+
+- **Policy Term Length (trm\_len):** A longer policy term is strongly associated with a significant decrease in the expected number of claims. For a one-unit increase in policy term length, the expected number of claims is estimated to decrease by approximately 11.39%.
+
+- **Driving History Score:** The driving history score does not show a significant effect on the expected number of claims.
+
+- **Vehicle Color (veh\_color):** The impact of vehicle color on the expected number of claims varies by color. For example, having a blue-colored vehicle is associated with a significant decrease in expected claims.
+
+- **Marital Status (marital\_status):** Marital status does not show a significant effect on the expected number of claims.
+
+- **Interaction Effects:** There are significant interaction effects between vehicle value and age, vehicle value and area, and driving history score and vehicle color.
+
+## Model Fit
+
+- **Dispersion Parameter:** The dispersion parameter indicates how well the Poisson model fits the data. In this case, a value of 1 suggests a good fit.
+
+- **Null and Residual Deviance:** Deviance measures how well the model explains the variability in the data. A lower residual deviance indicates a better fit. The model significantly reduces deviance compared to the null model.
+
+- **AIC (Akaike Information Criterion):** AIC is a measure of the model's goodness of fit, penalizing for the number of parameters. Lower AIC values indicate a better balance between model complexity and fit.
+
+The model provides insights into factors affecting the expected number of claims, considering exposure, age categories, vehicle value, policy term length, driving history score, vehicle color, marital status, and interaction effects.
+
+
+# Inverse-Gaussian Regression Interpretation
+
+## Key Findings
+
+- **Gender (genderM):** Being male is associated with a significant increase in the expected number of claims. Male policyholders are estimated to have an expected number of claims approximately 25.42% higher than female policyholders.
+
+- **Vehicle Age (veh\_age):** Vehicle age does not show a statistically significant effect on the expected number of claims.
+
+- **Age Categories (agecat):** Age categories do not have a statistically significant effect on the expected number of claims.
+
+- **Exposure Impact:** An increase in exposure is associated with a significant decrease in the expected number of claims. For a one-unit increase in exposure, the expected number of claims is estimated to decrease by approximately 39.57%.
+
+- **Policy Term Length (trm\_len):** A longer policy term is marginally associated with an increase in the expected number of claims. For a one-unit increase in policy term length, the expected number of claims is estimated to increase by approximately 3.68%.
+
+- **Geographic Areas (areaB, areaC, areaD, areaE, areaF):** Among the geographic areas, only areaF shows a marginally significant effect on the expected number of claims, with policyholders in areaF having an expected number of claims approximately 65.87% higher than in the reference area.
+
+- **Marital Status (marital\_statusS):** Marital status does not have a statistically significant effect on the expected number of claims.
+
+- **Driving History Score:** The driving history score does not have a statistically significant effect on the expected number of claims.
+
+- **Interaction Effects:** The interaction effect between geographic areas and marital status does not show statistical significance. Similarly, the interaction between marital status and driving history score is not statistically significant.
+
+## Model Fit
+
+- **Dispersion Parameter:** The dispersion parameter indicates how well the inverse-gaussian model fits the data. In this case, a value of 0.001349015 suggests a good fit.
+
+- **Null and Residual Deviance:** Deviance measures how well the model explains the variability in the data. A lower residual deviance indicates a better fit. The model significantly reduces deviance compared to the null model.
+
+- **AIC (Akaike Information Criterion):** AIC is a measure of the model's goodness of fit, penalizing for the number of parameters. In this case, the AIC value is 26019.
+
+The model provides insights into factors affecting the expected number of claims, considering gender, exposure, policy term length, geographic areas, and interaction effects.
+
+```{r}
+numeric_train_data <- train_data[sapply(train_data, is.numeric)]
+
+# Calculate the correlation matrix
+cor_matrix <- cor(numeric_train_data)
+
+# Install and load the corrplot package if not already installed
+# install.packages("corrplot")
+library(corrplot)
+
+# Create a correlation plot
+corrplot(cor_matrix)
+
+```
 
 ```{r}
 #1.2
 
-InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+InsNova.data <- read.csv("data/InsNova_data_2023_train.csv")
 train_data <- InsNova.data
 
-InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+InsNova.val_data <- read.csv("data/InsNova_data_2023_vh.csv")
 test_data <- InsNova.val_data
 
 y <- train_data$numclaims
@@ -196,11 +268,15 @@ Severity.pred.test <- predict(ivg.sub, newdata = test_data_splitted, type = "res
 final_prediction_test <- predictions_test_data * Severity.pred.test
 NormalizedGini(test_data_splitted$claimcst0, final_prediction_test)
 
+suppressWarnings({
 cv.ivg <- lapply(1:10, function(x) cv(fit=pm.sub, fit2=ivg.sub, data = train_data_splitted, data2=subset(train_data_splitted, clm>0), K=10))
 #mean of gini coefficients from 10 x 10-fold CV (around .21)
 mean(sapply(1:10, function(x) NormalizedGini(train_data_splitted$claimcst0, cv.ivg[[x]])))
 #standard deviation of gini coefficient from 10 X 10-fold CV (around .002)
 sd(sapply(1:10, function(x) NormalizedGini(train_data_splitted$claimcst0, cv.ivg[[x]])))
+})
+
+options(warn = -1) 
 
 ```
 
@@ -214,10 +290,10 @@ car::qqPlot(residuals(ivg.sub), main = NA, pch = 19, col = 2, cex = 0.7)
 ```{r}
 #2.1
 
-InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+InsNova.data <- read.csv("data/InsNova_data_2023_train.csv")
 train_data <- InsNova.data
 
-InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+InsNova.val_data <- read.csv("data/InsNova_data_2023_vh.csv")
 test_data <- InsNova.val_data
 
 y <- train_data$numclaims
@@ -228,6 +304,7 @@ train_data_splitted <- train_data[split_index, ]
 test_data_splitted <- train_data[-split_index, ]
 
 pm.sub <- glm(numclaims ~ exposure + veh_body + agecat + trm_len + high_education_ind, family = poisson , data = train_data , control = glm.control(maxit = 1000))
+summary(pm.sub)
 
 predictions <- predict(pm.sub, newdata = train_data, type = "response")
 train_data$numclaims_predicted <- predictions 
@@ -249,16 +326,75 @@ test_data$numclaims_predicted <- predictions_test_data
 Severity.pred.test <- predict(ivg.sub, newdata = test_data, type = "response")
 final_prediction_test <- predictions_test_data * Severity.pred.test
 NormalizedGini(train_data$claimcst0, final_prediction)
+
 ```
+
+# Poisson Regression Interpretation
+
+## Key Findings
+
+- **Exposure Impact:** An increase in exposure is strongly associated with a significant increase in the expected number of claims. For a one-unit increase in exposure, the expected number of claims is estimated to increase by approximately 9.51%.
+
+- **Vehicle Body Types:** The type of vehicle doesn't show consistent statistical significance in predicting the number of claims. Some categories, like 'CONVT' and 'COUPE,' are not statistically significant.
+
+- **Age Effect:** Age has a significant impact on the expected number of claims. As age increases, the expected number of claims decreases. Specifically, for a one-unit increase in age category, we expect the number of claims to decrease by approximately 9.43%.
+
+- **Policy Term Length (trm\_len):** A longer policy term is strongly associated with a significant decrease in the expected number of claims. For a one-unit increase in policy term length, the expected number of claims is estimated to decrease by approximately 11.57%.
+
+- **High Education Indicator:** The high education indicator has a marginally significant impact on the expected number of claims. Individuals with high education levels are associated with a decrease in the expected number of claims, although this effect is marginally significant.
+
+## Model Fit
+
+- **Dispersion Parameter:** The dispersion parameter indicates how well the Poisson model fits the data. In this case, a value of 1 suggests a good fit.
+
+- **Null and Residual Deviance:** Deviance measures how well the model explains the variability in the data. A lower residual deviance indicates a better fit. The model significantly reduces deviance compared to the null model.
+
+- **AIC (Akaike Information Criterion):** AIC is a measure of the model's goodness of fit, penalizing for the number of parameters. Lower AIC values indicate a better balance between model complexity and fit.
+
+The model provides insights into factors affecting the expected number of claims, considering exposure, vehicle body types, age, policy term length, and high education indicators.
+
+# Inverse Gaussian Regression Interpretation
+
+## Key Findings
+
+- **Exposure Impact:** A decrease in exposure is associated with an increase in the expected number of claims. Specifically, for a one-unit decrease in exposure, we expect the number of claims to increase by approximately 53.70%.
+
+- **Gender Effect:** Being male is associated with a significant increase in the expected number of claims compared to being female. Specifically, being male is associated with an approximate 24.35% increase in expected claims.
+
+- **Area Influence:** Living in areas labeled B or F has a significant impact on increasing the expected number of claims compared to the reference area A. For example, living in area B is associated with an approximate 13.50% increase in expected claims.
+
+- **Driving History Score:** There is a marginally significant positive association between the driving history score and the expected number of claims. For a one-unit increase in the driving history score, we expect an approximate 0.38% increase in expected claims.
+
+- **Time of Week Driven:** Driving on weekends compared to weekdays has a marginally significant positive impact on the expected number of claims. Driving on weekends is associated with an approximate 13.05% increase in expected claims.
+
+- **Policy Term Length (trm\_len):** A longer policy term is associated with a slight increase in the expected number of claims, although not statistically significant. For a one-unit increase in policy term length, we expect an approximate 3.76% increase in expected claims.
+
+- **Predicted Claims (numclaims\_predicted):** The predicted number of claims has a positive impact on the expected number of claims, but this effect is not statistically significant. For a one-unit increase in predicted claims, we expect an approximate 179.79% increase in expected claims.
+
+## Explanations
+
+- **Estimates:** The estimates represent the change in the expected log of claims for a one-unit change in each predictor.
+
+- **Significance Codes:** Significance codes indicate the level of confidence we have in the observed effects. Smaller p-values (e.g., < 0.05) suggest stronger evidence of an effect.
+
+## Model Fit
+
+- **Dispersion Parameter:** The dispersion parameter suggests how well the model fits the data. In this case, a lower value indicates a better fit.
+
+- **Null and Residual Deviance:** Deviance is a measure of how well the model explains the variability in the data. A lower residual deviance suggests a better fit.
+
+- **AIC (Akaike Information Criterion):** AIC is a measure of the model's goodness of fit, penalizing for the number of parameters. Lower AIC values indicate a better balance between model complexity and fit.
+
+The model provides insights into factors affecting the expected number of claims, considering exposure, gender, area of residence, driving history, time of week driven, policy term length, and predicted claims.
 
 
 ```{r}
 #2.2
 
-InsNova.data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_train.csv")
+InsNova.data <- read.csv("data/InsNova_data_2023_train.csv")
 train_data <- InsNova.data
 
-InsNova.val_data <- read.csv("2023-travelers-university-competition/InsNova_data_2023_vh.csv")
+InsNova.val_data <- read.csv("data/InsNova_data_2023_vh.csv")
 test_data <- InsNova.val_data
 
 y <- train_data$numclaims

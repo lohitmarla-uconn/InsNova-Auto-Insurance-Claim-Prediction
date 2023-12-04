@@ -1,8 +1,9 @@
 ---
-title: "InsNova_Auto_Insurance_Claim_Prediction_Frequency_Severity_Model"
+title: "InsNova_Auto_Insurance_Claim_Prediction_MLR_Model"
 author: "Lohit Marla"
 date: "2023-11-15"
-output: html_document
+output:
+  pdf_document: default
 ---
 
 ```{r}
@@ -43,34 +44,80 @@ str(test.data)
 ```{r}
 library(e1071)
 
-hist( (train.data$claimcst0), breaks=30, main="", xlab="fcover", col= "darkgrey")
+hist( (train.data$claimcst0), breaks=30, main="", xlab="claimcst0", col= "darkgrey")
 ```
 ```{r}
-hist( log(train.data$claimcst0), breaks=30, main="", xlab="fcover", col= "darkslateblue")
+summary(train.data$claimcst0)
+```
+
+```{r}
+hist( log(train.data$claimcst0), breaks=30, main="", xlab="log(claimcst0)", col= "darkgrey")
 ```
 ```{r}
-hist( sqrt(train.data$claimcst0), breaks=30, main="", xlab="fcover", col= "slategrey")
+hist( sqrt(train.data$claimcst0), breaks=30, main="", xlab="sqrt(claimcst0)", col= "darkgrey")
 ```
 ```{r}
-hist( poly(train.data$claimcst0, 2), breaks=30, main="", xlab="fcover", col= "darkgreen")
+hist( poly(train.data$claimcst0, 2), breaks=30, main="", xlab="poly(claimcst0)", col= "darkgrey")
 ```
 
 ```{r}
 mlr.full.mod <- lm(claimcst0 ~ . , data = train.data)
+summary(mlr.full.mod)
+
 ```
 
 ```{r}
 car::qqPlot(residuals(mlr.full.mod), main = NA, pch = 19, col = 2, cex = 0.7)
 
 ```
+
 ```{r}
 
-plot(train.data$claimcst0, predict(mod.1,newdata = train.data), 
+SumModelGini <- function(actuals, predictions) {
+  df = data.frame(actuals = actuals, predictions = predictions)
+  df <- df[order(df$predictions, decreasing = TRUE),]
+  df$random = (1:nrow(df))/nrow(df)
+  totalPos <- sum(df$actuals)
+  df$cumPosFound <- cumsum(df$actuals) # this will store the cumulative number of positive examples found (used for computing "Model Lorentz")
+  df$Lorentz <- df$cumPosFound / totalPos # this will store the cumulative proportion of positive examples found ("Model Lorentz")
+  df$Gini <- df$Lorentz - df$random # will store Lorentz minus random
+  return(sum(df$Gini))
+}
+
+NormalizedGini <- function(actuals, predictions) {
+  SumModelGini(actuals, predictions) / SumModelGini(actuals, actuals)
+}
+
+InsNova.data$id <- NULL
+InsNova.data$clm <- NULL
+InsNova.data$numclaims <- NULL
+
+InsNova.data[, column_names] <- lapply(InsNova.data[, column_names], as.factor)
+
+mlr.train.claimcst0 <- predict(mlr.full.mod, newdata = InsNova.data, type = "response")
+
+NormalizedGini(mlr.train.claimcst0, train.data$claimcst0 )
+
+```
+
+```{r}
+
+plot(train.data$claimcst0, predict(mlr.full.mod,newdata = train.data), 
      col=4, cex=0.3, xlab="Actual", ylab="Predicted", axes=FALSE)
-extpts <- which(abs(residuals(mod.1)) > 3*sd(residuals(mod.1)))
+extpts <- which(abs(residuals(mlr.full.mod)) > 3*sd(residuals(mlr.full.mod)))
 text(train.data$claimcst0[extpts], 
-     predict(mod.1,newdata = train.data)[extpts],
+     predict(mlr.full.mod,newdata = train.data)[extpts],
      rownames(train.data)[extpts], cex=0.5, col=2)
 axis(1); axis(2); grid(); abline(0,1, col=4, lwd=3)
 
+```
+```{r}
+
+#Variable inflation factor
+
+car::vif(mlr.full.mod) 
+
+cond_num <- round(max(car::vif(mlr.full.mod))  / min(car::vif(mlr.full.mod))  , 0)
+
+cond_num
 ```
